@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Porsche 911 GT3 RS (992) · 纯代码高精度拆解</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{
+    height:100%;overflow:hidden;background:#020305;color:#e6eef8;
+    font-family:"Inter","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;user-select:none;
+  }
+  #app{position:fixed;inset:0}
+  canvas{display:block;position:absolute;inset:0;z-index:0;cursor:grab}
+  canvas:active{cursor:grabbing}
+
+  /* 标签层 */
+  #labels{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+  .label{
+    position:absolute;left:0;top:0;transform:translate(-50%,-50%) scale(.9);
+    padding:6px 12px;border-radius:4px;white-space:nowrap;
+    background:rgba(5, 8, 10, 0.85);
+    border-left: 3px solid #00f0ff;
+    box-shadow:0 4px 12px rgba(0,0,0,.8), 0 0 10px rgba(0,240,255,.2);
+    opacity:0;transition:opacity .2s, transform .2s;
+    font-size:12px;font-weight:700;letter-spacing:.5px;color:#fff;
+    pointer-events:none;backdrop-filter:blur(4px);
+  }
+  .label.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .label small{display:block;font-size:10px;font-weight:400;color:#8ba6ba;letter-spacing:.5px;margin-top:2px}
+
+  /* 顶栏 */
+  #topbar{
+    position:absolute;z-index:6;top:0;left:0;right:0;height:80px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 30px;pointer-events:none;
+    background:linear-gradient(to bottom,rgba(2,3,5,.9),rgba(2,3,5,0));
+  }
+  .brand{display:flex;align-items:center;gap:16px;position:relative}
+  .brand-mark{
+    width:40px;height:48px;display:grid;place-items:center;
+    font-size:16px;font-weight:900;color:#000;
+    background:#fff; clip-path: polygon(0 0, 100% 0, 100% 80%, 50% 100%, 0 80%);
+  }
+  .brand-text h1{font-size:18px;font-weight:800;letter-spacing:4px;color:#fff;}
+  .brand-text p{font-size:10px;color:#5e88a8;letter-spacing:3px;margin-top:2px}
+
+  .top-actions{display:flex;gap:12px;position:relative;pointer-events:auto}
+  .btn{
+    cursor:pointer;border:1px solid rgba(255,255,255,.15);
+    background:rgba(10,15,20,.8);color:#b7dcf5;padding:10px 20px;border-radius:4px;
+    font-size:12px;font-weight:700;letter-spacing:1px;transition:.2s;
+    backdrop-filter:blur(10px);
+  }
+  .btn:hover{border-color:#00f0ff;color:#00f0ff;box-shadow:0 0 15px rgba(0,240,255,.2)}
+  .btn.primary{background:#fff;border-color:#fff;color:#000;}
+  .btn.primary:hover{background:#e0e0e0;box-shadow:0 0 20px rgba(255,255,255,.4)}
+
+  /* 面板 */
+  .panel{
+    position:absolute;z-index:5;
+    background:rgba(5, 8, 12, 0.85);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:8px;backdrop-filter:blur(20px);
+    box-shadow:0 15px 40px rgba(0,0,0,.9);
+  }
+
+  #listPanel{left:30px;top:100px;width:230px;padding:16px 12px;max-height:calc(100vh - 180px);display:flex;flex-direction:column}
+  .panel-title{
+    font-size:11px;letter-spacing:2px;color:#8ba6ba;font-weight:700;
+    padding:0 6px 12px;display:flex;justify-content:space-between;align-items:center;
+    border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:12px;flex:none;
+  }
+  .panel-title span{color:#00f0ff}
+
+  .part-list{flex:1;overflow-y:auto;padding-right:4px}
+  .part-list::-webkit-scrollbar{width:2px}
+  .part-list::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+
+  .part-item{
+    display:flex;align-items:center;gap:10px;cursor:pointer;
+    padding:10px;border-radius:4px;margin-bottom:2px;
+    font-size:12px;color:#8ba6ba;transition:.15s;
+  }
+  .part-item:hover{background:rgba(255,255,255,.05);color:#fff}
+  .part-item.active{background:rgba(0,240,255,.1);color:#00f0ff;border-left:2px solid #00f0ff}
+  .part-item .idx{font-size:10px;font-weight:800;color:#555;font-family:monospace}
+  .part-item.active .idx{color:#00f0ff}
+  .part-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* 信息面板 */
+  #infoPanel{
+    right:30px;top:100px;width:320px;padding:24px;opacity:0;transform:translateX(20px);
+    pointer-events:none;transition:all .3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #infoPanel.show{opacity:1;transform:translateX(0);pointer-events:auto}
+  .info-head{margin-bottom:20px}
+  .info-head h2{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
+  .info-head .en{font-size:11px;color:#00f0ff;letter-spacing:1px;font-family:monospace}
+  
+  .info-specs{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+  .spec-row{
+    display:flex;justify-content:space-between;font-size:12px;
+    padding:8px 12px;background:rgba(255,255,255,.03);border-radius:4px;
+  }
+  .spec-row span{color:#666}
+  .spec-row b{color:#fff;font-weight:600}
+  
+  .info-desc{font-size:12px;line-height:1.6;color:#999;margin-bottom:24px;text-align:justify}
+  #infoPanel .btn{width:100%;padding:12px}
+
+  /* 底部提示 */
+  #hint{
+    position:absolute;z-index:6;bottom:30px;left:50%;transform:translateX(-50%);
+    font-size:11px;color:#666;display:flex;align-items:center;gap:8px;
+    padding:8px 20px;border-radius:20px;background:rgba(5,8,10,.8);
+    border:1px solid rgba(255,255,255,.05);
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:#00f0ff;box-shadow:0 0 10px #00f0ff;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* 加载 */
+  #loader{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:#020305;transition:opacity .8s}
+  #loader.hide{opacity:0;pointer-events:none}
+  .spin{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.1);border-top-color:#00f0ff;animation:rot 1s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="labels"></div>
+
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-text">
+        <h1>911 GT3 RS</h1>
+        <p>PROCEDURAL MESH / 992</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btnAll" class="btn primary">全部拆解</button>
+      <button id="btnReset" class="btn">复位视角</button>
+    </div>
+  </header>
+
+  <aside id="listPanel" class="panel">
+    <div class="panel-title">部件拆解清单 <span id="partCount">0</span></div>
+    <div id="partList" class="part-list"></div>
+  </aside>
+
+  <aside id="infoPanel" class="panel"></aside>
+
+  <footer id="hint">
+    <span class="dot"></span> 拖拽旋转 · 滚轮缩放 · 点击部件查看详情
+  </footer>
+
+  <div id="loader"><div class="spin"></div></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* =========================================================
+   1. 环境与渲染
+   ========================================================= */
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x030405);
+scene.fog = new THREE.FogExp2(0x030405, 0.012);
+
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 500);
+camera.position.set(8, 4, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9; // 修复过曝问题
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+// 环境反射 (压低亮度，保持暗黑质感)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.02).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.7, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 4;
+controls.maxDistance = 20;
+controls.maxPolarAngle = Math.PI * 0.52;
+controls.update();
+
+/* =========================================================
+   2. 光影重塑 (强调轮廓)
+   ========================================================= */
+scene.add(new THREE.HemisphereLight(0x1a2a3a, 0x000000, 1.5));
+
+// 主光 (照亮车头右侧)
+const keyLight = new THREE.DirectionalLight(0xffeedd, 2.5);
+keyLight.position.set(5, 10, 5);
+scene.add(keyLight);
+
+// 轮廓光1 (左侧青蓝，勾勒溜背)
+const rimLight1 = new THREE.DirectionalLight(0x00f0ff, 6.0);
+rimLight1.position.set(-8, 4, -8);
+scene.add(rimLight1);
+
+// 轮廓光2 (右侧冰蓝，勾勒前脸)
+const rimLight2 = new THREE.DirectionalLight(0x0088ff, 4.0);
+rimLight2.position.set(8, 2, -5);
+scene.add(rimLight2);
+
+/* =========================================================
+   3. 材质库 (极度真实的黑武士)
+   ========================================================= */
+const MATS = {
+  paint: new THREE.MeshStandardMaterial({ 
+    color: 0x0f0f0f, metalness: 0.9, roughness: 0.4, envMapIntensity: 1.0 
+  }),
+  carbon: new THREE.MeshStandardMaterial({ 
+    color: 0x050505, metalness: 0.7, roughness: 0.5, envMapIntensity: 0.8
+  }),
+  glass: new THREE.MeshPhysicalMaterial({ 
+    color: 0x000000, metalness: 1, roughness: 0.05, transparent: true, opacity: 0.6, envMapIntensity: 2.0
+  }),
+  plastic: new THREE.MeshStandardMaterial({ color: 0x020202, metalness: 0.1, roughness: 0.9 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x4a4f55, metalness: 0.9, roughness: 0.4 }),
+  titanium: new THREE.MeshStandardMaterial({ color: 0x6e767e, metalness: 1.0, roughness: 0.3 }),
+  caliper: new THREE.MeshStandardMaterial({ color: 0xcc0000, metalness: 0.4, roughness: 0.4 }),
+  ceramic: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.5, roughness: 0.7 }),
+  rim: new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95, roughness: 0.2, envMapIntensity: 1.5 }),
+  tire: new THREE.MeshStandardMaterial({ color: 0x090909, roughness: 0.95 }),
+  light: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 4 }),
+  taillight: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 5 }),
+};
+
+/* =========================================================
+   4. 部件管理
+   ========================================================= */
+const parts = [];
+const partsById = {};
+const clickTargets = [];
+const GLOW_COLOR = new THREE.Color(0x00f0ff);
+const ZERO = new THREE.Vector3();
+
+function createPart(id, name, en, tag, specs, desc, explodeVec) {
+  const group = new THREE.Group();
+  scene.add(group);
+  const part = {
+    id, name, en, tag, specs, desc,
+    explode: new THREE.Vector3(...explodeVec),
+    group, matData: [], exploded: false, glow: 0,
+    labelAnchor: new THREE.Vector3(), labelEl: null
+  };
+  parts.push(part); partsById[id] = part;
+  return part;
+}
+
+function addMesh(parent, geo, mat, pos = [0,0,0], rot = [0,0,0]) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(pos[0], pos[1], pos[2]);
+  m.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(m);
+  return m;
+}
+
+/* =========================================================
+   5. 核心：参数化建模车身 (完美流线)
+   ========================================================= */
+
+// 5.1 主车身框架 (Body Shell)
+const body = createPart(
+  'body', '轻量化车架 & 碳纤维机盖', 'Body & Frame', '碳纤维/铝合金混合',
+  [['结构', '钢铝复合'], ['机盖', 'NACA导流']],
+  '992代GT3 RS采用极致轻量化设计，前机盖带有两个巨大的NACA导流槽。',
+  [0, 4.0, 0]
+);
+
+{
+  // 1. 绘制极其平滑的侧面轮廓 (基于保时捷911真实比例)
+  const outline = [
+    [-2.15, 0.12], [-2.30, 0.40], [-2.25, 0.85], [-2.05, 1.02], // 车尾/后保
+    [-1.60, 1.05], [-1.10, 1.18], [-0.30, 1.32], [ 0.40, 1.30], // 溜背/车顶
+    [ 0.90, 1.05], [ 1.40, 0.85], [ 2.05, 0.78], [ 2.25, 0.50], // 前机盖/青蛙眼
+    [ 2.20, 0.25], [ 2.00, 0.12]  // 前唇
+  ].map(p => new THREE.Vector2(p[0], p[1]));
+
+  const curve = new THREE.SplineCurve(outline);
+  const points = curve.getPoints(150); // 极高采样率，确保曲线极其顺滑
+  const shape = new THREE.Shape(points);
+
+  // 2. 挖出轮拱
+  const rearArch = new THREE.Path();
+  rearArch.absarc(-1.35, 0.45, 0.42, 0, Math.PI * 2, true);
+  shape.holes.push(rearArch);
+  const frontArch = new THREE.Path();
+  frontArch.absarc(1.35, 0.45, 0.40, 0, Math.PI * 2, true);
+  shape.holes.push(frontArch);
+
+  // 3. 挤出并开启超高精度的倒角 (消灭方块感)
+  const extrudeSettings = {
+    depth: 1.4,         // 基础宽度
+    bevelEnabled: true,
+    bevelThickness: 0.2, // 边缘圆润度
+    bevelSize: 0.2,
+    bevelSegments: 15,   // 极高的倒角细分，带来平滑过渡
+    curveSegments: 64    // 圆弧细分
+  };
+  
+  const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+  geo.translate(0, 0, -0.7); // 居中
+
+  // 4. 核心魔法：顶点变形 (实现保时捷宽体/收腰效果)
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    let x = pos.getX(i);
+    let y = pos.getY(i);
+    let z = pos.getZ(i);
+
+    // 宽度比例
+    let widthScale = 1.0;
+    
+    // 后翼子板 (宽体隆起，最宽处约在 x = -1.3)
+    if (x > -2.0 && x < -0.5) {
+      let t = (x + 1.3) / 0.6;
+      widthScale += 0.22 * Math.exp(-(t * t) * 2.5);
+    }
+    // 前翼子板 (隆起，最宽处约在 x = 1.3)
+    if (x > 0.5 && x < 2.0) {
+      let t = (x - 1.3) / 0.5;
+      widthScale += 0.15 * Math.exp(-(t * t) * 2.5);
+    }
+    // 座舱区域 (略微收腰)
+    if (x > -0.5 && x < 0.5) {
+      widthScale -= 0.05;
+    }
+    // 车顶收窄
+    if (y > 0.9) {
+      widthScale *= (1.0 - (y - 0.9) * 0.4);
+    }
+
+    // 应用 Z 轴宽度缩放
+    pos.setZ(i, z * widthScale);
+  }
+  geo.computeVertexNormals(); // 重新计算法线，确保反光平滑
+
+  const mesh = new THREE.Mesh(geo, MATS.paint);
+  body.group.add(mesh);
+
+  // 5. 添加外观细节
+  // 前机盖 NACA 导流槽 (深色凹陷)
+  [-1, 1].forEach(s => {
+    addMesh(body.group, new THREE.BoxGeometry(0.45, 0.02, 0.12), MATS.plastic, [1.3, 0.82, s * 0.35], [0, 0, -0.12]);
+  });
+
+  // 侧翼子板百叶窗
+  [-1, 1].forEach(s => {
+    for(let i=0; i<4; i++) {
+      addMesh(body.group, new THREE.BoxGeometry(0.15, 0.02, 0.01), MATS.plastic, [0.8, 0.85 - i*0.03, s * 0.88], [0, 0, 0.2]);
+    }
+  });
+
+  // 侧窗玻璃 (Shape拉平贴在侧面)
+  const winPts = [ new THREE.Vector2(0.4, 0.05), new THREE.Vector2(-0.6, 0.05), new THREE.Vector2(-0.5, 0.4), new THREE.Vector2(0.2, 0.4) ];
+  const windGeo = new THREE.ShapeGeometry(new THREE.Shape(winPts));
+  [-1, 1].forEach(s => {
+    addMesh(body.group, windGeo, MATS.glass, [0.1, 0.95, s * 0.72], [0, Math.PI/2, 0]);
+  });
+}
+
+// 5.2 车门 (Doors)
+const doors = createPart(
+  'doors', '碳纤维轻量化车门', 'Carbon Doors', '无框设计',
+  [['材质', '碳纤维'], ['拉花', 'GT3 RS']],
+  '采用碳纤维材质，取消传统把手，进一步减轻重量。',
+  [0, 1.0, 3.0]
+);
+
+{
+  [-1, 1].forEach(s => {
+    const doorGrp = new THREE.Group();
+    doorGrp.position.set(-0.1, 0.7, s * 0.82);
+    // 门外皮 (贴合车身宽度)
+    addMesh(doorGrp, new THREE.BoxGeometry(1.5, 0.5, 0.04), MATS.paint);
+    // 门内饰板
+    addMesh(doorGrp, new THREE.BoxGeometry(1.4, 0.45, 0.02), MATS.carbon, [0, 0, -s*0.03]);
+    // 侧裙拉花
+    addMesh(doorGrp, new THREE.BoxGeometry(0.8, 0.15, 0.01), MATS.metal, [0, -0.15, s*0.025]);
+    doors.group.add(doorGrp);
+  });
+}
+
+// 5.3 空力套件 (尾翼)
+const aero = createPart(
+  'aero', '空气动力学套件', 'Aero Package', 'DRS 天鹅颈尾翼',
+  [['尾翼', 'DRS 可调'], ['风刀', '碳纤维']],
+  'GT3 RS 最醒目的特征，巨大的天鹅颈式尾翼提供极高的下压力。',
+  [-2.5, 2.5, 0]
+);
+
+{
+  const wingGrp = new THREE.Group();
+  wingGrp.position.set(-2.0, 1.4, 0);
+  // 翼面
+  addMesh(wingGrp, new THREE.BoxGeometry(0.55, 0.03, 1.85), MATS.carbon, [0, 0, 0], [0, 0, -0.08]);
+  // 端板
+  [-1, 1].forEach(s => {
+    addMesh(wingGrp, new THREE.BoxGeometry(0.5, 0.2, 0.02), MATS.carbon, [-0.05, 0.05, s * 0.92]);
+  });
+  // 天鹅颈支架
+  [-1, 1].forEach(s => {
+    addMesh(wingGrp, new THREE.CylinderGeometry(0.025, 0.025, 0.5, 12), MATS.carbon, [0.1, -0.25, s * 0.5], [0, 0, 0.2]);
+  });
+  aero.group.add(wingGrp);
+
+  // 前风刀
+  [-1, 1].forEach(s => {
+    addMesh(aero.group, new THREE.BoxGeometry(0.25, 0.02, 0.12), MATS.carbon, [2.0, 0.4, s * 0.85], [0, 0, 0.1]);
+  });
+}
+
+// 5.4 保险杠与灯组
+const frontBumper = createPart(
+  'frontBumper', '前保险杠 & 矩阵大灯', 'Front Bumper', '四点式LED',
+  [['大灯', '矩阵LED'], ['进气', '中央双口']],
+  '巨大的中央进气口为散热器提供冷却空气。',
+  [3.0, 0, 0]
+);
+{
+  addMesh(frontBumper.group, new THREE.BoxGeometry(0.3, 0.4, 1.8), MATS.paint, [2.1, 0.4, 0]);
+  addMesh(frontBumper.group, new THREE.BoxGeometry(0.1, 0.25, 1.0), MATS.plastic, [2.22, 0.3, 0]);
+  // 大灯
+  [-1, 1].forEach(s => {
+    const z = s * 0.65;
+    addMesh(frontBumper.group, new THREE.CylinderGeometry(0.15, 0.15, 0.1, 32), MATS.paint, [2.05, 0.8, z], [0, 0, Math.PI/2]);
+    // 四点 LED
+    for(let i=0; i<4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI/4;
+      addMesh(frontBumper.group, new THREE.CylinderGeometry(0.025, 0.025, 0.12, 8), MATS.light, 
+        [2.05, 0.8 + Math.cos(a)*0.06, z + Math.sin(a)*0.06], [0, 0, Math.PI/2]);
+    }
+  });
+}
+
+const rearBumper = createPart(
+  'rearBumper', '后保险杠 & 尾灯', 'Rear Bumper', '贯穿灯带',
+  [['尾灯', '贯穿LED'], ['排气', '中置双出']],
+  '细长的贯穿式尾灯与底部的巨大扩散器，彰显赛道基因。',
+  [-3.0, 0, 0]
+);
+{
+  addMesh(rearBumper.group, new THREE.BoxGeometry(0.3, 0.5, 1.8), MATS.paint, [-2.2, 0.5, 0]);
+  addMesh(rearBumper.group, new THREE.BoxGeometry(0.05, 0.06, 1.5), MATS.taillight, [-2.32, 0.85, 0]);
+  // 排气
+  [-1, 1].forEach(s => {
+    addMesh(rearBumper.group, new THREE.CylinderGeometry(0.06, 0.06, 0.2, 16), MATS.titanium, [-2.15, 0.25, s*0.15], [0,0,Math.PI/2]);
+  });
+  // 扩散器
+  addMesh(rearBumper.group, new THREE.BoxGeometry(0.5, 0.2, 1.4), MATS.carbon, [-2.15, 0.15, 0], [0, 0, -0.2]);
+}
+
+// 5.5 高精度轮毂与刹车
+function buildWheel(id, name, x, z, dir) {
+  const p = createPart(id, name, id.includes('fl')?'Wheel LH':'Wheel RH', '中央锁止 / 碳陶',
+    [['轮毂', '锻造镁合金'], ['刹车', 'PCCB 碳陶']],
+    '复杂的 Y 型多辐条锻造轮毂，内部配备巨大的碳陶刹车盘。',
+    dir
+  );
+
+  const y = 0.45;
+  const R = 0.45;
+  const side = Math.sign(z);
+
+  // 轮胎
+  addMesh(p.group, new THREE.CylinderGeometry(R, R, 0.34, 36), MATS.tire, [x, y, z], [Math.PI/2, 0, 0]);
+  // 轮毂外圈
+  const faceZ = z + side * 0.11;
+  addMesh(p.group, new THREE.CylinderGeometry(0.36, 0.36, 0.04, 32), MATS.rim, [x, y, faceZ], [Math.PI/2, 0, 0]);
+
+  // Y型辐条 (精致感)
+  for(let i=0; i<10; i++) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, faceZ);
+    pivot.rotation.z = (i / 10) * Math.PI * 2;
+    addMesh(pivot, new THREE.BoxGeometry(0.045, 0.2, 0.03), MATS.rim, [0, 0.1, 0]);
+    addMesh(pivot, new THREE.BoxGeometry(0.025, 0.16, 0.03), MATS.rim, [0.05, 0.24, 0], [0, 0, -0.3]);
+    addMesh(pivot, new THREE.BoxGeometry(0.025, 0.16, 0.03), MATS.rim, [-0.05, 0.24, 0], [0, 0, 0.3]);
+    p.group.add(pivot);
+  }
+  
+  // 中心盖
+  addMesh(p.group, new THREE.CylinderGeometry(0.06, 0.06, 0.06, 16), MATS.metal, [x, y, faceZ]);
+  
+  // 刹车盘与红卡钳
+  addMesh(p.group, new THREE.CylinderGeometry(0.28, 0.28, 0.04, 32), MATS.ceramic, [x, y, z - side * 0.05], [Math.PI/2, 0, 0]);
+  addMesh(p.group, new THREE.BoxGeometry(0.1, 0.22, 0.08), MATS.caliper, [x - 0.18, y + 0.1, z - side * 0.05]);
+}
+
+buildWheel('w_fl', '左前轮', 1.35,  0.85, [1.5, 0.5, 3.0]);
+buildWheel('w_fr', '右前轮', 1.35, -0.85, [1.5, 0.5, -3.0]);
+buildWheel('w_rl', '左后轮', -1.35, 0.88, [-1.5, 0.5, 3.0]);
+buildWheel('w_rr', '右后轮', -1.35, -0.88, [-1.5, 0.5, -3.0]);
+
+// 5.6 动力总成
+const engine = createPart(
+  'engine', '4.0L 水平对置六缸', '4.0L NA Flat-6', '525 PS · 9000 rpm',
+  [['排量', '3996 cc'], ['转速', '9000 rpm']],
+  'GT3 RS 的高转速自然吸气引擎。',
+  [-3.0, 0.5, 0]
+);
+{
+  const root = new THREE.Group();
+  root.position.set(-1.6, 0.6, 0);
+  addMesh(root, new THREE.BoxGeometry(0.8, 0.35, 0.6), MATS.metal);
+  [-1, 1].forEach(s => {
+    addMesh(root, new THREE.BoxGeometry(0.7, 0.25, 0.25), MATS.plastic, [0, 0, s * 0.4]);
+    addMesh(root, new THREE.BoxGeometry(0.65, 0.1, 0.2), MATS.metal, [0, 0.18, s * 0.4]);
+  });
+  engine.group.add(root);
+}
+
+const trans = createPart('trans', '7速 PDK 变速箱', '7-Speed PDK', '双离合', [['档位','7速']], '极速换挡。', [-1.5, -0.5, 0]);
+{
+  addMesh(trans.group, new THREE.CylinderGeometry(0.25, 0.25, 0.9, 16), MATS.metal, [-0.8, 0.5, 0], [0, 0, Math.PI/2]);
+}
+
+// 5.7 排气/底盘/内饰 (简略构建，确保结构完整)
+const exhaust = createPart('exhaust', '钛合金运动排气', 'Titanium Exhaust', '轻量化', [['材质','钛合金']], '高亢声浪。', [-3.0, -1.0, 0]);
+addMesh(exhaust.group, new THREE.BoxGeometry(0.4, 0.2, 0.8), MATS.titanium, [-1.8, 0.3, 0]);
+
+const chassis = createPart('chassis', '底盘与悬挂系统', 'Chassis', '赛道化', [['悬架','双叉臂/多连杆']], '极致操控。', [0, -2.5, 0]);
+addMesh(chassis.group, new THREE.BoxGeometry(3.8, 0.08, 1.5), MATS.carbon, [0, 0.2, 0]);
+
+const interior = createPart('interior', '赛道化内饰', 'Interior', '碳纤维桶椅', [['座椅','全桶']], '防滚架。', [0, 3.0, 0]);
+[-1, 1].forEach(s => {
+  addMesh(interior.group, new THREE.BoxGeometry(0.5, 0.15, 0.5), MATS.carbon, [-0.1, 0.5, s * 0.4]);
+  addMesh(interior.group, new THREE.BoxGeometry(0.15, 0.7, 0.5), MATS.carbon, [-0.3, 0.85, s * 0.4], [0, 0, 0.1]);
+});
+
+
+/* =========================================================
+   6. 交互与动画 (保持不变)
+   ========================================================= */
+parts.forEach(part => {
+  part.group.traverse(obj => {
+    if (!obj.isMesh) return;
+    obj.material = obj.material.clone();
+    obj.userData.partId = part.id;
+    clickTargets.push(obj);
+    part.matData.push({
+      mat: obj.material,
+      baseEmissive: obj.material.emissive.clone(),
+      baseIntensity: obj.material.emissiveIntensity || 1
+    });
+  });
+  const box = new THREE.Box3().setFromObject(part.group);
+  box.getCenter(part.labelAnchor);
+});
+
+const labelsLayer = document.getElementById('labels');
+parts.forEach(part => {
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.innerHTML = `${part.name}${part.tag ? `<small>${part.tag}</small>` : ''}`;
+  labelsLayer.appendChild(el);
+  part.labelEl = el;
+});
+
+const listEl = document.getElementById('partList');
+const infoEl = document.getElementById('infoPanel');
+const btnAll = document.getElementById('btnAll');
+const btnReset = document.getElementById('btnReset');
+let selectedPart = null;
+let hoveredPart = null;
+
+document.getElementById('partCount').textContent = parts.length;
+parts.forEach((part, i) => {
+  const row = document.createElement('div');
+  row.className = 'part-item';
+  row.dataset.id = part.id;
+  row.innerHTML = `<span class="idx">${String(i+1).padStart(2,'0')}</span><span class="nm">${part.name}</span>`;
+  row.addEventListener('click', () => { togglePart(part); selectPart(part); });
+  row.addEventListener('mouseenter', () => { hoveredPart = part; });
+  row.addEventListener('mouseleave', () => { if (hoveredPart === part) hoveredPart = null; });
+  listEl.appendChild(row);
+});
+
+function updateListUI() {
+  listEl.querySelectorAll('.part-item').forEach(row => {
+    const p = partsById[row.dataset.id];
+    row.classList.toggle('active', !!p && p.exploded);
+  });
+}
+
+function selectPart(part) {
+  selectedPart = part;
+  if (!part) { infoEl.classList.remove('show'); return; }
+  infoEl.classList.add('show');
+  infoEl.innerHTML = `
+    <div class="info-head">
+      <h2>${part.name}</h2>
+      <span class="en">${part.en}</span>
+    </div>
+    <div class="info-specs">
+      ${part.specs.map(([k, v]) => `<div class="spec-row"><span>${k}</span><b>${v}</b></div>`).join('')}
+    </div>
+    <p class="info-desc">${part.desc}</p>
+    <button class="btn" id="toggleBtn">${part.exploded ? '↩ 复原' : '✦ 拆解'}</button>
+  `;
+  infoEl.querySelector('#toggleBtn').addEventListener('click', () => togglePart(part));
+}
+
+function togglePart(part) {
+  part.exploded = !part.exploded;
+  updateListUI();
+  if (selectedPart === part) selectPart(part);
+  syncBtn();
+}
+
+function syncBtn() {
+  const any = parts.some(p => p.exploded);
+  btnAll.textContent = any ? '全部复位' : '全部拆解';
+}
+
+btnAll.addEventListener('click', () => {
+  const next = !parts.some(p => p.exploded);
+  parts.forEach(p => (p.exploded = next));
+  updateListUI(); syncBtn();
+  if (selectedPart) selectPart(selectedPart);
+});
+
+btnReset.addEventListener('click', () => {
+  camera.position.set(8, 4, 10);
+  controls.target.set(0, 0.7, 0);
+  controls.update();
+});
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pDown = null;
+function updatePointer(e) { pointer.x = (e.clientX / innerWidth) * 2 - 1; pointer.y = -(e.clientY / innerHeight) * 2 + 1; }
+
+renderer.domElement.addEventListener('pointerdown', e => { pDown = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!pDown) return;
+  const dist = Math.hypot(e.clientX - pDown.x, e.clientY - pDown.y);
+  pDown = null;
+  if (dist > 5) return;
+  updatePointer(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickTargets, false);
+  if (hits.length) {
+    const part = partsById[hits[0].object.userData.partId];
+    if (part) { togglePart(part); selectPart(part); }
+  } else { selectPart(null); }
+});
+
+renderer.domElement.addEventListener('pointermove', e => {
+  updatePointer(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickTargets, false);
+  const part = hits.length ? partsById[hits[0].object.userData.partId] : null;
+  if (part !== hoveredPart) {
+    hoveredPart = part;
+    renderer.domElement.style.cursor = part ? 'pointer' : 'grab';
+  }
+});
+renderer.domElement.addEventListener('pointerleave', () => { hoveredPart = null; renderer.domElement.style.cursor = 'grab'; });
+
+const clock = new THREE.Clock();
+const tmpColor = new THREE.Color();
+const tmpVec = new THREE.Vector3();
+
+function updateLabels() {
+  parts.forEach(part => {
+    const visible = part.exploded || part === hoveredPart;
+    if (!visible) {
+      if (part.labelEl.classList.contains('show')) part.labelEl.classList.remove('show');
+      return;
+    }
+    tmpVec.copy(part.labelAnchor).add(part.group.position);
+    tmpVec.project(camera);
+    if (tmpVec.z > 1) { part.labelEl.classList.remove('show'); return; }
+    const x = (tmpVec.x * 0.5 + 0.5) * innerWidth;
+    const y = (-tmpVec.y * 0.5 + 0.5) * innerHeight;
+    part.labelEl.style.left = x + 'px';
+    part.labelEl.style.top = y + 'px';
+    part.labelEl.classList.add('show');
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const ease = 1 - Math.pow(0.0015, dt);
+
+  parts.forEach(part => {
+    const target = part.exploded ? part.explode : ZERO;
+    part.group.position.lerp(target, ease);
+
+    const glowTarget = (part.exploded || part === hoveredPart) ? 1 : 0;
+    part.glow += (glowTarget - part.glow) * Math.min(1, dt * 10);
+    const pulse = part.exploded ? 0.7 + 0.3 * Math.sin(t * 5 + part.group.position.x) : 1;
+    const g = part.glow * pulse;
+
+    if (g > 0.005) {
+      for (let i = 0; i < part.matData.length; i++) {
+        const d = part.matData[i];
+        tmpColor.copy(d.baseEmissive).lerp(GLOW_COLOR, g * 0.8);
+        d.mat.emissive.copy(tmpColor);
+        d.mat.emissiveIntensity = d.baseIntensity + g * (part.id === 'body' ? 0.1 : 1.2); // 车壳保持黑
+      }
+    } else if (part.glow > 0) {
+      for (let i = 0; i < part.matData.length; i++) {
+        const d = part.matData[i];
+        d.mat.emissive.copy(d.baseEmissive);
+        d.mat.emissiveIntensity = d.baseIntensity;
+      }
+    }
+  });
+
+  controls.update();
+  updateLabels();
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+updateListUI(); syncBtn(); animate();
+setTimeout(() => { document.getElementById('loader').classList.add('hide'); }, 500);
+</script>
+</body>
+</html>
