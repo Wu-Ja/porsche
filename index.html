@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Porsche 911 · 3D 拆解可视化</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{
+    height:100%;overflow:hidden;background:#05070d;color:#e6eef8;
+    font-family:"Inter","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;user-select:none;
+  }
+  #app{position:fixed;inset:0}
+  canvas{display:block;position:absolute;inset:0;z-index:0;cursor:grab}
+  canvas:active{cursor:grabbing}
+
+  /* ---------- 标签层 ---------- */
+  #labels{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+  .label{
+    position:absolute;left:0;top:0;transform:translate(-50%,-50%) scale(.9);
+    padding:5px 11px;border-radius:8px;white-space:nowrap;
+    background:linear-gradient(160deg,rgba(10,26,44,.92),rgba(6,14,26,.92));
+    border:1px solid rgba(60,200,255,.45);
+    box-shadow:0 0 18px rgba(40,180,255,.35),0 4px 16px rgba(0,0,0,.6);
+    opacity:0;transition:opacity .22s ease, transform .22s ease;
+    font-size:12px;font-weight:600;letter-spacing:.4px;color:#a9e8ff;
+  }
+  .label.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .label small{display:block;font-size:10px;font-weight:400;color:#5f9fc4;letter-spacing:.2px;margin-top:2px}
+  .label::after{
+    content:'';position:absolute;left:50%;bottom:-5px;width:1px;height:5px;
+    background:linear-gradient(to bottom,rgba(60,200,255,.8),transparent);
+  }
+
+  /* ---------- 顶栏 ---------- */
+  #topbar{
+    position:absolute;z-index:6;top:0;left:0;right:0;height:78px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 26px;pointer-events:none;
+  }
+  #topbar::before{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(to bottom,rgba(5,8,14,.9),rgba(5,8,14,0));
+    pointer-events:none;
+  }
+  .brand{display:flex;align-items:center;gap:14px;position:relative}
+  .brand-mark{
+    width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
+    font-size:15px;font-weight:800;letter-spacing:-.5px;color:#06121d;
+    background:linear-gradient(135deg,#7ce6ff,#2b9dff);
+    box-shadow:0 0 26px rgba(60,190,255,.55);
+  }
+  .brand-text h1{
+    font-size:17px;font-weight:800;letter-spacing:3px;
+    background:linear-gradient(90deg,#ffffff,#8ad8ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand-text p{font-size:11px;color:#5e88a8;letter-spacing:2px;margin-top:3px}
+
+  .top-actions{display:flex;gap:10px;position:relative;pointer-events:auto}
+  .btn{
+    pointer-events:auto;cursor:pointer;border:1px solid rgba(90,180,255,.3);
+    background:rgba(14,24,40,.75);color:#b7dcf5;padding:9px 18px;border-radius:9px;
+    font-size:12.5px;font-weight:600;letter-spacing:.6px;font-family:inherit;
+    transition:.2s;backdrop-filter:blur(10px);
+  }
+  .btn:hover{border-color:rgba(90,210,255,.75);color:#e6f7ff;background:rgba(24,44,72,.85);box-shadow:0 0 18px rgba(50,170,255,.28)}
+  .btn.primary{
+    background:linear-gradient(135deg,rgba(43,157,255,.9),rgba(20,110,200,.9));
+    border-color:rgba(120,220,255,.6);color:#04141f;font-weight:800;
+  }
+  .btn.primary:hover{box-shadow:0 0 24px rgba(60,180,255,.6)}
+
+  /* ---------- 面板 ---------- */
+  .panel{
+    position:absolute;z-index:5;
+    background:linear-gradient(160deg,rgba(13,20,32,.9),rgba(6,10,18,.94));
+    border:1px solid rgba(80,170,255,.16);
+    border-radius:14px;backdrop-filter:blur(16px);
+    box-shadow:0 10px 44px rgba(0,0,0,.6),inset 0 1px 0 rgba(120,200,255,.07);
+  }
+
+  #listPanel{left:24px;top:96px;width:216px;padding:16px 12px 12px}
+  .panel-title{
+    font-size:11.5px;letter-spacing:2px;color:#5f90b4;font-weight:700;
+    padding:0 6px 12px;display:flex;justify-content:space-between;align-items:center;
+    border-bottom:1px solid rgba(80,170,255,.12);margin-bottom:10px;
+  }
+  .panel-title span{color:#4fc3ff;font-size:10.5px;letter-spacing:1px}
+
+  .part-list{max-height:calc(100vh - 240px);overflow-y:auto;padding-right:2px}
+  .part-list::-webkit-scrollbar{width:4px}
+  .part-list::-webkit-scrollbar-thumb{background:rgba(80,170,255,.3);border-radius:2px}
+
+  .part-item{
+    display:flex;align-items:center;gap:9px;cursor:pointer;
+    padding:8px 9px;border-radius:8px;margin-bottom:3px;
+    font-size:12.5px;color:#9dbdd6;transition:.16s;border:1px solid transparent;
+  }
+  .part-item:hover{background:rgba(40,110,180,.22);color:#dff2ff}
+  .part-item.active{
+    background:linear-gradient(90deg,rgba(40,150,255,.26),rgba(40,150,255,.05));
+    border-color:rgba(80,200,255,.45);color:#8fe4ff;
+    box-shadow:0 0 16px rgba(50,170,255,.2);
+  }
+  .part-item .idx{
+    width:18px;height:18px;border-radius:5px;display:grid;place-items:center;
+    font-size:9.5px;font-weight:800;background:rgba(80,170,255,.14);color:#5eaee0;flex:none;
+  }
+  .part-item.active .idx{background:rgba(60,200,255,.35);color:#031018}
+  .part-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---------- 信息面板 ---------- */
+  #infoPanel{
+    right:24px;top:96px;width:290px;padding:18px;opacity:0;transform:translateX(14px);
+    pointer-events:none;transition:opacity .25s, transform .25s;
+  }
+  #infoPanel.show{opacity:1;transform:translateX(0);pointer-events:auto}
+  .info-head{display:flex;align-items:baseline;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+  .info-head h2{font-size:16px;font-weight:800;color:#eaf8ff;letter-spacing:.5px}
+  .info-head .en{font-size:10.5px;color:#4f8cb5;letter-spacing:1.4px;text-transform:uppercase}
+  .info-specs{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+  .spec-row{
+    display:flex;justify-content:space-between;gap:10px;font-size:11.5px;
+    padding:6px 9px;border-radius:7px;background:rgba(60,140,220,.09);
+    border-left:2px solid rgba(70,190,255,.5);
+  }
+  .spec-row span{color:#5e8dab}
+  .spec-row b{color:#8fe4ff;font-weight:700;letter-spacing:.3px}
+  .info-desc{font-size:11.5px;line-height:1.75;color:#7fa4bd;margin-bottom:15px}
+  #infoPanel .btn{width:100%;text-align:center}
+
+  /* ---------- 底部提示 ---------- */
+  #hint{
+    position:absolute;z-index:6;bottom:22px;left:50%;transform:translateX(-50%);
+    font-size:11.5px;color:#4d7a99;letter-spacing:1.2px;display:flex;align-items:center;gap:8px;
+    padding:8px 18px;border-radius:20px;background:rgba(8,14,24,.6);
+    border:1px solid rgba(80,170,255,.12);backdrop-filter:blur(8px);
+  }
+  .dot{
+    width:6px;height:6px;border-radius:50%;background:#35d6ff;flex:none;
+    box-shadow:0 0 10px #35d6ff;animation:pulse 1.8s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  /* ---------- 加载 ---------- */
+  #loader{
+    position:absolute;inset:0;z-index:20;display:grid;place-items:center;
+    background:#05070d;transition:opacity .6s;
+  }
+  #loader.hide{opacity:0;pointer-events:none}
+  .spin{
+    width:40px;height:40px;border-radius:50%;
+    border:2px solid rgba(80,170,255,.18);border-top-color:#35d6ff;
+    animation:rot .8s linear infinite;
+  }
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  @media (max-width:900px){
+    #listPanel{display:none}
+    #infoPanel{right:12px;left:12px;width:auto;top:auto;bottom:70px}
+    #topbar{padding:0 14px}
+    .brand-text h1{font-size:14px;letter-spacing:2px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="labels"></div>
+
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-mark">911</div>
+      <div class="brand-text">
+        <h1>PORSCHE 911</h1>
+        <p>INTERACTIVE 3D EXPLODED VIEW</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btnAll" class="btn primary">全部拆解</button>
+      <button id="btnReset" class="btn">复位视角</button>
+    </div>
+  </header>
+
+  <aside id="listPanel" class="panel">
+    <div class="panel-title">部件清单 <span id="partCount">12</span></div>
+    <div id="partList" class="part-list"></div>
+  </aside>
+
+  <aside id="infoPanel" class="panel"></aside>
+
+  <footer id="hint">
+    <span class="dot"></span> 拖拽旋转 · 滚轮缩放 · 点击部件拆解 / 复位
+  </footer>
+
+  <div id="loader"><div class="spin"></div></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* =========================================================
+   1. 场景基础
+   ========================================================= */
+const app = document.getElementById('app');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070d);
+scene.fog = new THREE.FogExp2(0x05070d, 0.021);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 400);
+camera.position.set(7.6, 4.3, 9.4);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+// 环境反射（让金属材质有质感）
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.85, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.065;
+controls.minDistance = 3.5;
+controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI * 0.53;
+controls.update();
+
+/* =========================================================
+   2. 灯光
+   ========================================================= */
+scene.add(new THREE.HemisphereLight(0x9fd0ff, 0x0a0d14, 0.9));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+keyLight.position.set(9, 13, 8);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x3f74ff, 1.5);
+fillLight.position.set(-10, 6, -8);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xff3f68, 1.1);
+rimLight.position.set(-5, 3.5, 10);
+scene.add(rimLight);
+
+const glowPoint = new THREE.PointLight(0x00d4ff, 22, 16, 2);
+glowPoint.position.set(0, -1.2, 0);
+scene.add(glowPoint);
+
+/* =========================================================
+   3. 星空背景粒子
+   ========================================================= */
+(function buildStars() {
+  const COUNT = 700;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    const r = 26 + Math.random() * 46;
+    const t = Math.random() * Math.PI * 2;
+    const p = Math.acos(Math.random() * 2 - 1);
+    pos[i * 3]     = r * Math.sin(p) * Math.cos(t);
+    pos[i * 3 + 1] = r * Math.cos(p) * 0.55 + 6;
+    pos[i * 3 + 2] = r * Math.sin(p) * Math.sin(t);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0x4a9ad8, size: 0.16, transparent: true, opacity: 0.72,
+    sizeAttenuation: true, depthWrite: false
+  });
+  scene.add(new THREE.Points(geo, mat));
+})();
+
+/* =========================================================
+   4. 部件管理
+   ========================================================= */
+const parts = [];
+const partsById = {};
+const clickTargets = [];
+const GLOW_COLOR = new THREE.Color(0x27b8ff);
+const ZERO = new THREE.Vector3();
+
+function makePart(cfg) {
+  const group = new THREE.Group();
+  group.name = cfg.id;
+  scene.add(group);
+
+  const part = {
+    id: cfg.id,
+    name: cfg.name,
+    en: cfg.en,
+    tag: cfg.tag || '',
+    specs: cfg.specs || [],
+    desc: cfg.desc || '',
+    explode: new THREE.Vector3(cfg.explode[0], cfg.explode[1], cfg.explode[2]),
+    group,
+    matData: [],
+    exploded: false,
+    glow: 0,
+    labelAnchor: new THREE.Vector3(),
+    labelEl: null
+  };
+  parts.push(part);
+  partsById[part.id] = part;
+  return part;
+}
+
+function addMesh(parent, geo, mat, pos = [0, 0, 0], rot = [0, 0, 0]) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(pos[0], pos[1], pos[2]);
+  m.rotation.set(rot[0], rot[1], rot[2]);
+  parent.add(m);
+  return m;
+}
+
+/* =========================================================
+   5. 车身外壳（侧向轮廓挤压 + 轮拱镂空）
+   ========================================================= */
+function buildBodyGeometry() {
+  const profile = [
+    [-2.10, 0.10], [-2.22, 0.44], [-2.14, 0.78], [-1.96, 0.98],
+    [-1.52, 1.08], [-1.00, 1.31], [-0.45, 1.45], [ 0.10, 1.45],
+    [ 0.52, 1.19], [ 0.92, 1.00], [ 1.50, 0.92], [ 1.94, 0.86],
+    [ 2.16, 0.64], [ 2.20, 0.36], [ 2.04, 0.10]
+  ].map(p => new THREE.Vector2(p[0], p[1]));
+
+  const outline = new THREE.SplineCurve(profile).getPoints(140);
+  const shape = new THREE.Shape(outline);
+
+  // 轮拱镂空
+  const rearArch = new THREE.Path();
+  rearArch.absarc(-1.32, 0.54, 0.36, 0, Math.PI * 2, true);
+  shape.holes.push(rearArch);
+
+  const frontArch = new THREE.Path();
+  frontArch.absarc(1.34, 0.52, 0.34, 0, Math.PI * 2, true);
+  shape.holes.push(frontArch);
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 1.66,
+    bevelEnabled: true,
+    bevelThickness: 0.055,
+    bevelSize: 0.05,
+    bevelSegments: 3,
+    curveSegments: 14,
+    steps: 1
+  });
+  geo.translate(0, 0, -0.83);
+  return geo;
+}
+
+const bodyPart = makePart({
+  id: 'body',
+  name: '车身外壳',
+  en: 'Body Shell',
+  tag: '钢铝复合 · Cd 0.29',
+  specs: [
+    ['结构形式', '承载式钢铝混合'],
+    ['整备质量', '1,505 kg'],
+    ['风阻系数', 'Cd 0.29'],
+    ['车漆', '卫红 Guards Red']
+  ],
+  desc: '992 代 911 采用钢铝复合承载式车身，前部铝合金、后部高强度钢，兼顾轻量化与刚性。经典「蛙眼」造型与飞线车顶延续六十年设计基因。',
+  explode: [0, 3.6, 0]
+});
+
+{
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xb2111f, metalness: 0.85, roughness: 0.24,
+    emissive: 0x000000, envMapIntensity: 1.2
+  });
+  bodyPart.group.add(new THREE.Mesh(buildBodyGeometry(), bodyMat));
+
+  // 后视镜
+  const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x8d0e19, metalness: 0.8, roughness: 0.3 });
+  [-1, 1].forEach(s => {
+    addMesh(bodyPart.group, new THREE.BoxGeometry(0.16, 0.05, 0.05), mirrorMat, [0.62, 1.08, s * 0.90]);
+    addMesh(bodyPart.group, new THREE.BoxGeometry(0.18, 0.11, 0.09), mirrorMat, [0.62, 1.10, s * 0.96]);
+  });
+
+  // 门缝装饰条
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0x1a0206, metalness: 0.4, roughness: 0.8 });
+  [-1, 1].forEach(s => {
+    addMesh(bodyPart.group, new THREE.BoxGeometry(1.35, 0.012, 0.012), lineMat, [0.05, 0.78, s * 0.893]);
+  });
+}
+
+/* =========================================================
+   6. 车窗玻璃
+   ========================================================= */
+const glassPart = makePart({
+  id: 'glass',
+  name: '车窗玻璃',
+  en: 'Glazing',
+  tag: '双层夹胶 · 隔热隔音',
+  specs: [
+    ['前风挡', '双层夹胶隔音玻璃'],
+    ['侧窗', '单层钢化 · 深色镀膜'],
+    ['透光率', '前 75% / 后 30%']
+  ],
+  desc: '全车玻璃采用轻量化设计，前风挡为双层夹胶结构，可有效降低风噪与路噪，同时兼顾碰撞安全与隔热性能。',
+  explode: [0, 1.5, 0]
+});
+
+{
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x0c1722, metalness: 0.95, roughness: 0.06,
+    transparent: true, opacity: 0.78, side: THREE.DoubleSide,
+    envMapIntensity: 2.2
+  });
+
+  // 侧窗（左右）
+  const winPts = [
+    [-0.95, 1.02], [-0.64, 1.25], [-0.10, 1.33], [0.30, 1.19], [0.40, 1.01]
+  ].map(p => new THREE.Vector2(p[0], p[1]));
+  const winGeo = new THREE.ShapeGeometry(new THREE.Shape(winPts), 16);
+
+  [-1, 1].forEach(s => {
+    const m = new THREE.Mesh(winGeo, glassMat);
+    m.position.z = s * 0.902;
+    glassPart.group.add(m);
+  });
+
+  // 四点四边形工具
+  const quad = (a, b, c, d) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      ...a, ...b, ...c, ...a, ...c, ...d
+    ]), 3));
+    g.computeVertexNormals();
+    return g;
+  };
+
+  // 前风挡（贴合 A 柱斜面）
+  {
+    const nx = 0.26 / Math.hypot(0.26, 0.42), ny = 0.42 / Math.hypot(0.26, 0.42);
+    const o = 0.014;
+    const ax = 0.10 + nx * o, ay = 1.45 + ny * o;
+    const bx = 0.52 + nx * o, by = 1.19 + ny * o;
+    glassPart.group.add(new THREE.Mesh(
+      quad([ax, ay, -0.76], [ax, ay, 0.76], [bx, by, 0.76], [bx, by, -0.76]),
+      glassMat
+    ));
+  }
+
+  // 后窗
+  {
+    const dx = -0.55, dy = -0.16;
+    const len = Math.hypot(dx, dy);
+    const nx = -dy / len, ny = dx / len; // 指向上方
+    const o = 0.014;
+    const ax = -0.45 + nx * o, ay = 1.45 + ny * o;
+    const bx = -1.00 + nx * o, by = 1.31 + ny * o;
+    glassPart.group.add(new THREE.Mesh(
+      quad([ax, ay, -0.76], [ax, ay, 0.76], [bx, by, 0.76], [bx, by, -0.76]),
+      glassMat
+    ));
+  }
+}
+
+/* =========================================================
+   7. 水平对置六缸发动机
+   ========================================================= */
+const enginePart = makePart({
+  id: 'engine',
+  name: '水平对置六缸发动机',
+  en: 'Flat-6 Twin-Turbo',
+  tag: '3.0L 双涡轮 · 394 PS',
+  specs: [
+    ['排量', '2,981 cc'],
+    ['最大功率', '394 PS / 6,500 rpm'],
+    ['最大扭矩', '450 N·m / 1,950-5,000 rpm'],
+    ['布局', '后置 · 水平对置六缸']
+  ],
+  desc: '3.0 升水平对置双涡轮增压发动机，采用中央喷油与可变气门正时。后置布局带来极低的重心与独特的水平对置声浪，是 911 六十年来不变的核心。',
+  explode: [-2.8, -0.25, 0]
+});
+
+{
+  const root = new THREE.Group();
+  root.position.set(-1.46, 0.52, 0);
+  enginePart.group.add(root);
+
+  const metalMat = new THREE.MeshStandardMaterial({ color: 0x8b939d, metalness: 0.95, roughness: 0.34 });
+  const darkMat  = new THREE.MeshStandardMaterial({ color: 0x2a2f38, metalness: 0.8, roughness: 0.52 });
+  const redMat   = new THREE.MeshStandardMaterial({ color: 0xc01824, metalness: 0.55, roughness: 0.42 });
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x5d666f, metalness: 1.0, roughness: 0.28 });
+
+  // 曲轴箱
+  addMesh(root, new THREE.BoxGeometry(0.68, 0.34, 0.44), metalMat);
+
+  // 两侧缸体（各 3 缸）
+  const cylGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.30, 18);
+  const headGeo = new THREE.BoxGeometry(0.19, 0.23, 0.10);
+  const xs = [-0.20, 0, 0.20];
+
+  [-1, 1].forEach(s => {
+    xs.forEach(x => {
+      addMesh(root, cylGeo, steelMat, [x, 0, s * 0.36], [Math.PI / 2, 0, 0]);
+      addMesh(root, headGeo, darkMat, [x, 0, s * 0.53]);
+    });
+  });
+
+  // 进气歧管
+  addMesh(root, new THREE.BoxGeometry(0.56, 0.13, 0.30), metalMat, [0, 0.23, 0]);
+  addMesh(root, new THREE.BoxGeometry(0.20, 0.10, 0.14), redMat, [0.02, 0.30, 0]);
+
+  // 正时盖 & 皮带轮
+  addMesh(root, new THREE.BoxGeometry(0.06, 0.36, 0.46), darkMat, [0.37, 0, 0]);
+  addMesh(root, new THREE.CylinderGeometry(0.09, 0.09, 0.05, 20), steelMat, [0.42, 0.10, 0], [0, 0, Math.PI / 2]);
+
+  // 涡轮增压器
+  [-1, 1].forEach(s => {
+    addMesh(root, new THREE.CylinderGeometry(0.09, 0.09, 0.11, 16), steelMat, [0.26, 0.16, s * 0.30], [Math.PI / 2, 0, 0]);
+    addMesh(root, new THREE.TorusGeometry(0.10, 0.025, 8, 18), redMat, [0.26, 0.16, s * 0.30], [Math.PI / 2, 0, 0]);
+  });
+
+  // 油底壳
+  addMesh(root, new THREE.BoxGeometry(0.52, 0.10, 0.36), darkMat, [0, -0.21, 0]);
+}
+
+/* =========================================================
+   8. 四轮总成
+   ========================================================= */
+function buildWheelPart(id, name, px, pz, explodeDir) {
+  const part = makePart({
+    id, name,
+    en: pz > 0 ? 'Wheel LH' : 'Wheel RH',
+    tag: '20/21 英寸 · 米其林 PS4S',
+    specs: [
+      ['轮胎规格', px > 0 ? '245/35 R20' : '305/30 R21'],
+      ['轮毂', px > 0 ? '20 英寸锻造' : '21 英寸锻造'],
+      ['制动', '通风打孔盘 + 6/4 活塞卡钳']
+    ],
+    desc: '锻造铝合金轮毂配合高性能运动轮胎，提供强大抓地力。前后异尺寸设定（前窄后宽）进一步提升转向精准度与后轮循迹性。',
+    explode: explodeDir
+  });
+
+  const py = 0.40;
+  const R = 0.40;
+  const side = Math.sign(pz);
+
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x14161b, metalness: 0.12, roughness: 0.94 });
+  const rimMat  = new THREE.MeshStandardMaterial({ color: 0xa3adb8, metalness: 1.0, roughness: 0.26 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x191c22, metalness: 0.75, roughness: 0.58 });
+  const discMat = new THREE.MeshStandardMaterial({ color: 0x4b525b, metalness: 0.9, roughness: 0.5 });
+  const calMat  = new THREE.MeshStandardMaterial({ color: 0xd21a2a, metalness: 0.5, roughness: 0.4, emissive: 0x2a0006, emissiveIntensity: 1 });
+
+  // 轮胎
+  addMesh(part.group, new THREE.CylinderGeometry(R, R, 0.28, 36, 1), tireMat, [px, py, pz], [Math.PI / 2, 0, 0]);
+  // 胎肩过渡
+  addMesh(part.group, new THREE.CylinderGeometry(R * 0.94, R * 0.94, 0.30, 36, 1), tireMat, [px, py, pz], [Math.PI / 2, 0, 0]);
+
+  // 轮辋内圈
+  addMesh(part.group, new THREE.CylinderGeometry(R * 0.66, R * 0.66, 0.30, 32), darkMat, [px, py, pz], [Math.PI / 2, 0, 0]);
+
+  // 轮辐
+  const faceZ = pz + side * 0.10;
+  for (let i = 0; i < 10; i++) {
+    const pivot = new THREE.Group();
+    pivot.position.set(px, py, faceZ);
+    pivot.rotation.z = (i / 10) * Math.PI * 2;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.245, 0.038), rimMat);
+    spoke.position.set(0, 0.125, 0);
+    pivot.add(spoke);
+    part.group.add(pivot);
+  }
+
+  // 中心盖
+  addMesh(part.group, new THREE.CylinderGeometry(0.075, 0.075, 0.32, 20), rimMat, [px, py, pz], [Math.PI / 2, 0, 0]);
+
+  // 刹车盘
+  addMesh(part.group, new THREE.CylinderGeometry(0.225, 0.225, 0.032, 28), discMat, [px, py, pz - side * 0.055], [Math.PI / 2, 0, 0]);
+  // 卡钳
+  addMesh(part.group, new THREE.BoxGeometry(0.10, 0.16, 0.055), calMat, [px - 0.16, py + 0.09, pz - side * 0.055]);
+
+  return part;
+}
+
+buildWheelPart('wheel-fl', '左前轮总成', 1.34,  0.88, [0.5, 0.6, 2.0]);
+buildWheelPart('wheel-fr', '右前轮总成', 1.34, -0.88, [0.5, 0.6, -2.0]);
+buildWheelPart('wheel-rl', '左后轮总成', -1.32, 0.88, [-0.5, 0.6, 2.0]);
+buildWheelPart('wheel-rr', '右后轮总成', -1.32, -0.88, [-0.5, 0.6, -2.0]);
+
+/* =========================================================
+   9. 底盘车架
+   ========================================================= */
+const chassisPart = makePart({
+  id: 'chassis',
+  name: '底盘车架',
+  en: 'Chassis & Frame',
+  tag: '铝合金 · 高刚性',
+  specs: [
+    ['前悬架', '麦弗逊 / 双叉臂'],
+    ['后悬架', '多连杆 + PASM'],
+    ['转向', '电动机械助力'],
+    ['驱动', '后置后驱 / 四驱可选']
+  ],
+  desc: '高强度钢铝复合底盘配合前双叉臂、后多连杆悬架，标配 PASM 主动悬挂管理系统，可在舒适与运动之间毫秒级切换。',
+  explode: [0, -2.0, 0]
+});
+
+{
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a414b, metalness: 0.92, roughness: 0.44 });
+  const plateMat = new THREE.MeshStandardMaterial({ color: 0x22272f, metalness: 0.85, roughness: 0.55 });
+
+  // 底板
+  addMesh(chassisPart.group, new THREE.BoxGeometry(3.5, 0.07, 1.36), plateMat, [0, 0.17, 0]);
+  // 纵梁
+  [-1, 1].forEach(s => {
+    addMesh(chassisPart.group, new THREE.BoxGeometry(3.4, 0.13, 0.10), frameMat, [0, 0.28, s * 0.62]);
+  });
+  // 横梁
+  [-1.45, -0.72, 0.1, 0.85, 1.5].forEach(x => {
+    addMesh(chassisPart.group, new THREE.BoxGeometry(0.10, 0.11, 1.28), frameMat, [x, 0.30, 0]);
+  });
+  // 前后副车架
+  addMesh(chassisPart.group, new THREE.BoxGeometry(0.55, 0.16, 1.42), frameMat, [1.45, 0.34, 0]);
+  addMesh(chassisPart.group, new THREE.BoxGeometry(0.55, 0.16, 1.42), frameMat, [-1.45, 0.34, 0]);
+}
+
+/* =========================================================
+   10. 前大灯
+   ========================================================= */
+const headPart = makePart({
+  id: 'headlight',
+  name: '矩阵式 LED 大灯',
+  en: 'LED Matrix Headlights',
+  tag: '84 像素 · 自适应远光',
+  specs: [
+    ['光源', '四点式 LED 矩阵'],
+    ['像素', '84 像素独立控制'],
+    ['功能', '自适应远近光 / 转向辅助']
+  ],
+  desc: '经典圆形大灯造型内嵌四点式 LED 矩阵模组，可独立控制 84 个像素，实现精准的防眩目自适应远光。',
+  explode: [1.9, 0.7, 0]
+});
+
+{
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0xfff4d8, emissive: 0xffe9b4, emissiveIntensity: 1.8,
+    metalness: 0.2, roughness: 0.12
+  });
+  const housingMat = new THREE.MeshStandardMaterial({ color: 0x14171d, metalness: 0.85, roughness: 0.35 });
+
+  [-1, 1].forEach(s => {
+    const z = s * 0.58;
+    // 灯壳
+    addMesh(headPart.group, new THREE.SphereGeometry(0.175, 22, 16), housingMat, [1.90, 0.84, z]);
+    // 透镜
+    const lens = addMesh(headPart.group, new THREE.SphereGeometry(0.148, 22, 16), lensMat, [1.94, 0.84, z]);
+    lens.scale.set(0.85, 1, 1);
+    // 内部四点
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      addMesh(headPart.group, new THREE.SphereGeometry(0.032, 10, 8), lensMat,
+        [1.99, 0.84 + Math.cos(a) * 0.062, z + Math.sin(a) * 0.062]);
+    }
+  });
+}
+
+/* =========================================================
+   11. 尾灯
+   ========================================================= */
+const tailPart = makePart({
+  id: 'taillight',
+  name: '贯穿式尾灯',
+  en: 'Light Bar',
+  tag: 'LED 光带 · 立体字标',
+  specs: [
+    ['形式', '贯穿式 LED 光带'],
+    ['宽度', '1.30 m'],
+    ['功能', '制动 / 转向 / 迎宾动画']
+  ],
+  desc: '992 代标志性的贯穿式 LED 尾灯，灯带中央嵌入立体 PORSCHE 字标，解锁与锁车时呈现迎宾灯光动画。',
+  explode: [-1.7, 0.55, 0]
+});
+
+{
+  const tailMat = new THREE.MeshStandardMaterial({
+    color: 0xff2b45, emissive: 0xff1a33, emissiveIntensity: 2.2,
+    metalness: 0.3, roughness: 0.2
+  });
+  const shellMat = new THREE.MeshStandardMaterial({ color: 0x1a1015, metalness: 0.8, roughness: 0.35 });
+
+  addMesh(tailPart.group, new THREE.BoxGeometry(0.06, 0.13, 1.34), shellMat, [-2.09, 0.78, 0]);
+  addMesh(tailPart.group, new THREE.BoxGeometry(0.035, 0.075, 1.26), tailMat, [-2.13, 0.78, 0]);
+}
+
+/* =========================================================
+   12. 后扰流板
+   ========================================================= */
+const spoilerPart = makePart({
+  id: 'spoiler',
+  name: '主动式尾翼',
+  en: 'Active Rear Spoiler',
+  tag: '多段可调 · 自动升降',
+  specs: [
+    ['形式', '电动多段可调'],
+    ['展开角度', '0° / 15° / 30° / 45°'],
+    ['作用', '提升高速下压力']
+  ],
+  desc: '可自动升降的主动式后扰流板，根据车速与驾驶模式自动调整角度，高速时提供额外下压力，制动时还可作为空气刹车展开。',
+  explode: [-1.6, 2.0, 0]
+});
+
+{
+  const spMat = new THREE.MeshStandardMaterial({ color: 0x1a1e24, metalness: 0.75, roughness: 0.35 });
+  addMesh(spoilerPart.group, new THREE.BoxGeometry(0.44, 0.055, 1.30), spMat, [-1.72, 1.10, 0], [0, 0, -0.10]);
+  [-1, 1].forEach(s => {
+    addMesh(spoilerPart.group, new THREE.BoxGeometry(0.10, 0.10, 0.07), spMat, [-1.72, 1.04, s * 0.48]);
+  });
+}
+
+/* =========================================================
+   13. 排气系统
+   ========================================================= */
+const exhaustPart = makePart({
+  id: 'exhaust',
+  name: '运动排气系统',
+  en: 'Sport Exhaust',
+  tag: '双出 · 可变阀门',
+  specs: [
+    ['形式', '中置双出'],
+    ['材质', '不锈钢 / 钛合金'],
+    ['功能', '可变阀门 · 声浪可调']
+  ],
+  desc: '双出运动排气系统配备电子可变阀门，在运动模式下释放更加浑厚的水平对置声浪，同时兼顾日常巡航的静谧性。',
+  explode: [-2.2, -0.7, 0]
+});
+
+{
+  const pipeMat = new THREE.MeshStandardMaterial({ color: 0x9aa2ab, metalness: 1.0, roughness: 0.22 });
+  const innerMat = new THREE.MeshStandardMaterial({ color: 0x0a0b0d, metalness: 0.6, roughness: 0.8 });
+
+  [-1, 1].forEach(s => {
+    addMesh(exhaustPart.group, new THREE.CylinderGeometry(0.062, 0.062, 0.34, 18), pipeMat,
+      [-2.22, 0.34, s * 0.34], [0, 0, Math.PI / 2]);
+    addMesh(exhaustPart.group, new THREE.CylinderGeometry(0.046, 0.046, 0.36, 16), innerMat,
+      [-2.23, 0.34, s * 0.34], [0, 0, Math.PI / 2]);
+  });
+  // 消音器
+  addMesh(exhaustPart.group, new THREE.BoxGeometry(0.44, 0.22, 0.72), pipeMat, [-1.92, 0.30, 0]);
+}
+
+/* =========================================================
+   14. 材质克隆 / 点击目标 / 标签锚点
+   ========================================================= */
+parts.forEach(part => {
+  part.group.traverse(obj => {
+    if (!obj.isMesh) return;
+    obj.material = obj.material.clone();
+    obj.userData.partId = part.id;
+    clickTargets.push(obj);
+
+    part.matData.push({
+      mat: obj.material,
+      baseEmissive: obj.material.emissive.clone(),
+      baseIntensity: obj.material.emissiveIntensity
+    });
+  });
+
+  const box = new THREE.Box3().setFromObject(part.group);
+  box.getCenter(part.labelAnchor);
+});
+
+/* =========================================================
+   15. 标签 DOM
+   ========================================================= */
+const labelsLayer = document.getElementById('labels');
+parts.forEach(part => {
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.innerHTML = `${part.name}${part.tag ? `<small>${part.tag}</small>` : ''}`;
+  labelsLayer.appendChild(el);
+  part.labelEl = el;
+});
+
+/* =========================================================
+   16. UI：部件清单 / 信息面板
+   ========================================================= */
+const listEl = document.getElementById('partList');
+const infoEl = document.getElementById('infoPanel');
+const btnAll = document.getElementById('btnAll');
+const btnReset = document.getElementById('btnReset');
+let selectedPart = null;
+let hoveredPart = null;
+
+document.getElementById('partCount').textContent = parts.length;
+
+parts.forEach((part, i) => {
+  const row = document.createElement('div');
+  row.className = 'part-item';
+  row.dataset.id = part.id;
+  row.innerHTML = `<span class="idx">${String(i + 1).padStart(2, '0')}</span><span class="nm">${part.name}</span>`;
+  row.addEventListener('click', () => {
+    togglePart(part);
+    selectPart(part);
+  });
+  row.addEventListener('mouseenter', () => { hoveredPart = part; });
+  row.addEventListener('mouseleave', () => { if (hoveredPart === part) hoveredPart = null; });
+  listEl.appendChild(row);
+});
+
+function updateListUI() {
+  listEl.querySelectorAll('.part-item').forEach(row => {
+    const p = partsById[row.dataset.id];
+    row.classList.toggle('active', !!p && p.exploded);
+  });
+}
+
+function selectPart(part) {
+  selectedPart = part;
+  if (!part) {
+    infoEl.classList.remove('show');
+    return;
+  }
+  infoEl.classList.add('show');
+  infoEl.innerHTML = `
+    <div class="info-head">
+      <h2>${part.name}</h2>
+      <span class="en">${part.en}</span>
+    </div>
+    <div class="info-specs">
+      ${part.specs.map(([k, v]) => `<div class="spec-row"><span>${k}</span><b>${v}</b></div>`).join('')}
+    </div>
+    <p class="info-desc">${part.desc}</p>
+    <button class="btn" id="toggleBtn">${part.exploded ? '↩ 复位该部件' : '✦ 拆解该部件'}</button>
+  `;
+  const tb = infoEl.querySelector('#toggleBtn');
+  tb.addEventListener('click', () => togglePart(part));
+}
+
+function togglePart(part) {
+  part.exploded = !part.exploded;
+  updateListUI();
+  if (selectedPart === part) selectPart(part);
+  syncAllButton();
+}
+
+function syncAllButton() {
+  const anyExploded = parts.some(p => p.exploded);
+  btnAll.textContent = anyExploded ? '全部复位' : '全部拆解';
+}
+
+btnAll.addEventListener('click', () => {
+  const next = !parts.some(p => p.exploded);
+  parts.forEach(p => (p.exploded = next));
+  updateListUI();
+  syncAllButton();
+  if (selectedPart) selectPart(selectedPart);
+});
+
+btnReset.addEventListener('click', () => {
+  camera.position.set(7.6, 4.3, 9.4);
+  controls.target.set(0, 0.85, 0);
+  controls.update();
+});
+
+/* =========================================================
+   17. 交互：射线拾取
+   ========================================================= */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pointerDownPos = null;
+
+function setPointerFromEvent(e) {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+}
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!pointerDownPos) return;
+  const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+  pointerDownPos = null;
+  if (dist > 6) return; // 拖拽旋转，不算点击
+
+  setPointerFromEvent(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickTargets, false);
+  if (hits.length) {
+    const part = partsById[hits[0].object.userData.partId];
+    if (part) {
+      togglePart(part);
+      selectPart(part);
+    }
+  } else {
+    selectPart(null);
+  }
+});
+
+renderer.domElement.addEventListener('pointermove', e => {
+  setPointerFromEvent(e);
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(clickTargets, false);
+  const part = hits.length ? partsById[hits[0].object.userData.partId] : null;
+  if (part !== hoveredPart) {
+    hoveredPart = part;
+    renderer.domElement.style.cursor = part ? 'pointer' : 'grab';
+  }
+});
+
+renderer.domElement.addEventListener('pointerleave', () => {
+  hoveredPart = null;
+  renderer.domElement.style.cursor = 'grab';
+});
+
+/* =========================================================
+   18. 动画循环
+   ========================================================= */
+const clock = new THREE.Clock();
+const tmpColor = new THREE.Color();
+const tmpVec = new THREE.Vector3();
+
+function updateLabels() {
+  parts.forEach(part => {
+    const visible = part.exploded || part === hoveredPart;
+    if (!visible) {
+      if (part.labelEl.classList.contains('show')) part.labelEl.classList.remove('show');
+      return;
+    }
+    tmpVec.copy(part.labelAnchor).add(part.group.position);
+    tmpVec.project(camera);
+
+    if (tmpVec.z > 1) {
+      part.labelEl.classList.remove('show');
+      return;
+    }
+
+    const x = (tmpVec.x * 0.5 + 0.5) * innerWidth;
+    const y = (-tmpVec.y * 0.5 + 0.5) * innerHeight;
+    part.labelEl.style.left = x + 'px';
+    part.labelEl.style.top = y + 'px';
+    part.labelEl.classList.add('show');
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const ease = 1 - Math.pow(0.0015, dt);
+
+  parts.forEach(part => {
+    // 位置缓动
+    const target = part.exploded ? part.explode : ZERO;
+    part.group.position.lerp(target, ease);
+
+    // 高亮强度缓动
+    const glowTarget = (part.exploded || part === hoveredPart) ? 1 : 0;
+    part.glow += (glowTarget - part.glow) * Math.min(1, dt * 9);
+
+    // 拆解状态下呼吸脉冲
+    const pulse = part.exploded ? 0.72 + 0.28 * Math.sin(t * 3 + part.group.position.x) : 1;
+    const g = part.glow * pulse;
+
+    if (g > 0.004) {
+      for (let i = 0; i < part.matData.length; i++) {
+        const d = part.matData[i];
+        tmpColor.copy(d.baseEmissive).lerp(GLOW_COLOR, g * 0.85);
+        d.mat.emissive.copy(tmpColor);
+        d.mat.emissiveIntensity = d.baseIntensity + g * 1.15;
+      }
+    } else if (part.glow > 0) {
+      for (let i = 0; i < part.matData.length; i++) {
+        const d = part.matData[i];
+        d.mat.emissive.copy(d.baseEmissive);
+        d.mat.emissiveIntensity = d.baseIntensity;
+      }
+    }
+  });
+
+  // 底部氛围光呼吸
+  glowPoint.intensity = 16 + Math.sin(t * 1.6) * 8;
+
+  controls.update();
+  updateLabels();
+  renderer.render(scene, camera);
+}
+
+/* =========================================================
+   19. 自适应
+   ========================================================= */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* =========================================================
+   20. 启动
+   ========================================================= */
+updateListUI();
+syncAllButton();
+animate();
+
+setTimeout(() => {
+  document.getElementById('loader').classList.add('hide');
+}, 400);
+</script>
+</body>
+</html>
